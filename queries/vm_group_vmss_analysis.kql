@@ -1,0 +1,53 @@
+resources
+| where type =~ 'microsoft.compute/virtualmachines'
+
+// VM GROUPING OPTIONS
+// Choose one grouping method by uncommenting its section below.
+
+// Option 1: Uncomment the following section to group VMs by name prefix (e.g., "app01" -> "app").
+
+// | where name matches regex '^[a-zA-Z]+\\d+$'             
+// | extend g = tostring(extract('^[a-zA-Z]+', 0, name)) 
+
+// Option 2: Uncomment the following section to group VMs by custom name regex pattern.
+//           Replace 'regex-pattern' with your pattern.
+//           Regex pattern must include exactly one capture group.
+//           Use Copilot to rapidly build regex pattern from sample VM names.
+
+// | extend g = tostring(extract_all(@'(?i)regex-pattern', name))
+
+// Option 3: Uncomment the following section to group VMs by resource group.
+
+// | extend g = resourceGroup
+
+// Option 4: Uncomment the following section to group VMs by tag.
+//           Replace 'tag-name' with the name of your tag.
+
+// | extend g = tostring(tags['tag-name'])
+
+// Option 5: Uncomment the following section to group VMs by multiple values.
+
+// | extend g = bag_pack('key_1', 'value_1', 'key_2', 'value_2')
+
+// Option 6: Uncomment the following section to group by custom KQL expression.
+
+// | extend g = // custom grouping expression
+
+| extend group = tostring(g)
+| where isnotempty(group)
+| extend vmssId = tostring(properties.virtualMachineScaleSet.id)
+| summarize _totalVms = count(),
+            _totalVmsInVmss = countif(isnotempty(vmssId)),
+            _totalVmsNotInVmss = countif(isempty(vmssId)),
+            _totalVmss = dcountif(vmssId, isnotempty(vmssId))
+            by group, location
+| project _totalVms, _totalVmsInVmss, _totalVmsNotInVmss, _totalVmss, group, location,
+          alert_totalVmsNotInVmss = tobool(_totalVmsNotInVmss > 0),
+          alert_totalVmss = tobool(_totalVms > 0 and _totalVmss != 1)
+| project group, location,
+          totalVms = _totalVms,
+          totalVmsInVmss = _totalVmsInVmss,
+          totalVmsNotInVmss = iff(alert_totalVmsNotInVmss, strcat(_totalVmsNotInVmss, ' ⚠️'), tostring(_totalVmsNotInVmss)),
+          totalVmss = iff(alert_totalVmss, strcat(_totalVmss, ' ⚠️'), tostring(_totalVmss)),
+          notes = strcat(iff(alert_totalVmsNotInVmss, '⚠️ Some VMs in this group are not part of a VMSS. ', '✅ All VMs in this group are protected by VMSS. '),
+                         iff(alert_totalVmss, '⚠️ All VMs in this group should be part of the same VMSS. ', '✅ All VMs in this group are part of the same VMSS. '))
