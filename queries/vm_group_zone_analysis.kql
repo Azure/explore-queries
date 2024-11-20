@@ -1,0 +1,58 @@
+resources
+| where type =~ 'microsoft.compute/virtualmachines'
+
+// VM GROUPING OPTIONS
+// Choose one grouping method by uncommenting its section below.
+
+// Option 1: Uncomment the following section to group VMs by name prefix (e.g., "app01" -> "app").
+
+// | where name matches regex '^[a-zA-Z]+\\d+$'             
+// | extend g = tostring(extract('^[a-zA-Z]+', 0, name)) 
+
+// Option 2: Uncomment the following section to group VMs by custom name regex pattern.
+//           Replace 'regex-pattern' with your pattern.
+//           Regex pattern must include exactly one capture group.
+//           Use Copilot to rapidly build regex pattern from sample VM names.
+
+// | extend g = tostring(extract_all(@'(?i)regex-pattern', name))
+
+// Option 3: Uncomment the following section to group VMs by resource group.
+
+// | extend g = resourceGroup
+
+// Option 4: Uncomment the following section to group VMs by tag.
+//           Replace 'tag-name' with the name of your tag.
+
+// | extend g = tostring(tags['tag-name'])
+
+// Option 5: Uncomment the following section to group VMs by multiple values.
+
+// | extend g = bag_pack('key_1', 'value_1', 'key_2', 'value_2')
+
+// Option 6: Uncomment the following section to group by custom KQL expression.
+
+// | extend g = // custom grouping expression
+
+| extend group = tostring(g)
+| where isnotempty(group)
+| summarize vmCount = count()
+            by group, location, subscriptionId, vmZone = tostring(zones[0])
+| summarize _totalVms = sum(vmCount),
+            _totalZones = countif(isnotempty(vmZone)),
+            _totalZonalVms = sumif(vmCount, isnotempty(vmZone)),
+            _totalRegionalVms = sumif(vmCount, isempty(vmZone)),
+            _zonalSpreadPct = round(iff((countif(isnotempty(vmZone)) < min_of(2, sum(vmCount))), real(0), (100 - ((stdevif(vmCount, isnotempty(vmZone)) / sumif(vmCount, isnotempty(vmZone)) * 100)))), 2)
+            by group, location, subscriptionId
+| project _totalZones, _totalZonalVms, _totalRegionalVms, _zonalSpreadPct, group, location, subscriptionId,
+          alert_totalZones = tobool(_totalZones < min_of(2, _totalVms)),
+          alert_totalRegionalVms = tobool(_totalRegionalVms > 0),
+          alert_zonalSpreadPct = tobool(_zonalSpreadPct < 80)
+| project group, location, subscriptionId,
+          totalVms = _totalZonalVms + _totalRegionalVms,
+          totalZonalVms = _totalZonalVms,
+          totalRegionalVms = iff(alert_totalRegionalVms, strcat(_totalRegionalVms, ' ⚠️'), tostring(_totalRegionalVms)),
+          totalZones = iff(alert_totalZones, strcat(_totalZones, ' ⚠️'), tostring(_totalZones)),
+          zonalSpreadScore = iff(alert_zonalSpreadPct, strcat(_zonalSpreadPct, ' % ⚠️'), strcat(_zonalSpreadPct, ' %')),
+          notes = strcat(iff(alert_totalZones, '⚠️ Where possible, VMs in this group should be deployed across at least two (2) zones. ', '✅ VMs in this group are deployed across a sufficient number of zones. '),
+                         iff(alert_totalRegionalVms, '⚠️ Some VMs in this group are regional (not deployed to any zone). ', '✅ All VMs in this group are zonal; none are regional. '), 
+                         iff(alert_zonalSpreadPct, '⚠️ VMs in this group are not evenly spread across zones (max spread of 20%). ', '✅ All VMs in this group are spread evenly across zones. '))
