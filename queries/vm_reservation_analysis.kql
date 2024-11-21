@@ -1,0 +1,37 @@
+resources
+| where type =~ 'microsoft.compute/virtualmachines'
+
+// VM GROUPING OPTIONS
+// Choose one grouping method by uncommenting its section below.
+
+// Option 1: Uncomment the following section to group VMs by name prefix (e.g., "app01" -> "app").
+
+// | where name matches regex '^[a-zA-Z]+\\d+$'             
+// | extend g = tostring(extract('^[a-zA-Z]+', 0, name)) 
+
+// Option 2: Uncomment the following section to group VMs by custom name regex pattern.
+//           Replace 'regex-pattern' with your pattern.
+//           Regex pattern must include exactly one capture group.
+//           Use Copilot to rapidly build regex pattern from sample VM names.
+
+// | extend g = tostring(extract_all(@'(?i)regex-pattern', name))
+
+// Option 3: Uncomment the following section to group VMs by resource group.
+
+// | extend g = resourceGroup
+
+// Option 4: Uncomment the following section to group VMs by tag.
+//           Replace 'tag-name' with the name of your tag.
+
+// | extend g = tostring(tags['tag-name'])
+
+// Option 5: Uncomment the following section to group VMs by multiple values.
+
+// | extend g = bag_pack('key_1', 'value_1', 'key_2', 'value_2')
+
+// Option 6: Uncomment the following section to group by custom KQL expression.
+
+// | extend g = // custom grouping expression
+
+| extend group = tostring(g)
+| where isnotempty(group)
