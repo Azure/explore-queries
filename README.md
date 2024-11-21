@@ -14,6 +14,7 @@ Each query in this repository is structured to support easy and customizable VM 
 | [**vm_group_sku_analysis.kql**](queries/vm_group_sku_analysis.kql) | Analyzes the VM SKUs within each group, allowing you to assess resource allocation, identify cost implications, and optimize SKU usage based on workload requirements. |
 | [**vm_group_vmss_analysis.kql**](queries/vm_group_vmss_analysis.kql) | Examines VM Scale Sets (VMSS) associated with each group, offering insights into scalability and deployment configurations for each workload. |
 | [**vm_group_zone_analysis.kql**](queries/vm_group_zone_analysis.kql) | Evaluates the distribution of VMs across availability zones within each group, providing insights into redundancy, fault tolerance, and geographic placement. |
+| [**vm_reservation_analysis.kql**](queries/vm_reservation_analysis.kql) | Analyzes VM capacity reservation coverage highlighting coverage gaps, reservation purchase recommendations, and reservation overallocations. |
 
 ## How to Use
 
