@@ -23,7 +23,7 @@ resources
 // Option 4: Uncomment the following section to group VMs by tag.
 //           Replace 'tag-name' with the name of your tag.
 
-// | extend g = tostring(tags['tag-name'])
+// | extend g = tostring(tags['epic-app'])
 
 // Option 5: Uncomment the following section to group VMs by multiple values.
 
@@ -35,3 +35,54 @@ resources
 
 | extend group = tostring(g)
 | where isnotempty(group)
+| summarize vmCount = count(),
+            resVmCount = countif(not(isnull(properties.capacityReservation))),
+            unresVmCount = countif(isnull(properties.capacityReservation))
+            by size = tolower(tostring(properties.hardwareProfile.vmSize)),
+               zone = tostring(zones[0]),
+               subscriptionId,
+               location,
+               group
+| join kind = leftouter(
+    resources
+    | where type =~ "microsoft.compute/capacityreservationgroups/capacityreservations"
+    | summarize _totalResCapacity = sum(toint(sku.capacity)),
+                _availResCapacity = sum(toint(sku.capacity) - iff(isnull(properties.virtualMachinesAssociated), 0, array_length(properties.virtualMachinesAssociated)))
+                by size = tolower(tostring(sku.name)),
+                   zone = tostring(zones[0]),
+                   subscriptionId,
+                   location
+) on size,
+     zone,
+     subscriptionId,
+     location
+| extend totalResCapacity = iff(isnull(_totalResCapacity), 0, _totalResCapacity)
+| extend availResCapacity = iff(isnull(_availResCapacity), 0, _availResCapacity)
+| extend overallocatedResCapacity = iff(availResCapacity < 0, abs(availResCapacity), 0)
+| extend purchaseResCapacity = unresVmCount - availResCapacity
+| extend alert_notEnoughRes = tobool(unresVmCount > availResCapacity)
+| extend alert_unresVms = tobool(unresVmCount > 0)
+| extend alert_overallocated = tobool(overallocatedResCapacity > 0)
+| project group, size, zone, subscriptionId, location, vmCount,
+          reservedVms = strcat(
+            tostring(resVmCount), "/", tostring(vmCount), "  (", round((resVmCount * 100 / vmCount), 2), " %)",
+            iff(alert_unresVms, " ⚠️", "")
+          ),
+          totalCapacity = totalResCapacity,
+          availableCapacity = strcat(
+            tostring(min_of(availResCapacity, 0)),
+            iff(alert_notEnoughRes, " ⚠️", "")
+          ),
+          purchaseCapacity = purchaseResCapacity,
+          overallocatedCapacity = strcat(
+            tostring(overallocatedResCapacity),
+            iff(alert_overallocated, " ⚠️", "")
+          ),
+          notes = strcat(
+            iff(alert_unresVms, strcat("⚠️ ", unresVmCount, " VM(s) do not have reservation(s). "), "✅ All VM(s) have reservation(s). "),
+            iff(alert_notEnoughRes, strcat("⚠️ ", "Not enough reservation(s) (", totalResCapacity, ") to cover ", vmCount, " VM(s). "), "✅ There are enough reservation(s) to cover all VM(s). "),
+            iff(alert_overallocated, strcat("⚠️ ", "Reservation(s) are overallocated by ", overallocatedResCapacity, " VM(s). "), "✅ No reservations are overallocated. ")
+          )
+
+
+
