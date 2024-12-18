@@ -35,7 +35,7 @@ resources
 
 | extend group = tostring(g)
 | where isnotempty(group)
-| extend vmssId = tostring(properties.virtualMachineScaleSet.id)
+| extend vmssId = tolower(tostring(properties.virtualMachineScaleSet.id))
 | summarize _totalVms = count(),
             _totalVmsInVmss = countif(isnotempty(vmssId)),
             _totalVmsNotInVmss = countif(isempty(vmssId)),
