@@ -33,6 +33,6 @@ resources
 
 // | extend g = // custom grouping expression
 
-| extend group = tostring(g)
+| extend group = tolower(tostring(g))
 | where isnotempty(group)
 | summarize vmCount = count() by group, location, subscriptionId
